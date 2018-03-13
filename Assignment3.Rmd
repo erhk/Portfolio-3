@@ -1,0 +1,430 @@
+---
+title: "Assignment3"
+author: "RF"
+date: "3/6/2018"
+output: html_document
+---
+
+```{r}
+setwd("C:/Users/emily/Desktop/Uni/Rstudio/R - Datascripts/Comp. Modelling/Portfolio-3")
+ASD <- read.csv("Assignment3Data.csv")
+
+
+library(rethinking);library(ggplot2)
+```
+
+## Multivariate linear models
+
+In this assignment you will investigate the relation between different aspects of IQ and symptom severity in ASD (as measured by ADOS). The assignment is meant to make you practice on linear models, multiple predictors and interactions.
+
+The data you will use is the outcome of the psychological testing of the children you analyzed in methods 3.
+Data: https://www.dropbox.com/s/hom2qnmp9hyfwmu/Assignment3Data.csv?dl=0
+The data consists of ChildID, gender, age, diagnosis (ASD), symptom severity (ADOS), several aspects of IQ (NonVerbal/Perceptual,Verbal,Social) and the visit at which the tests were administered. The questions should be answered by focusing on visit 1.
+
+The questions you will have to answer are:
+
+1. Assess the relation between symptom severity and IQ (focus on visit 1 and children with ASD) and report the model, a plot of the model, a couple of lines describing the quality of the model and interpreting the results. P.S. Should you scale? P.P.S. Don't forget to motivate your priors. P.P.P.S. At least one plot for results and a plot for quality of each model (here and in the next questions) would be appreciated.
+
+1.1. Verbal IQ and ADOS
+#Asses quality also by putting densityplots next to each other
+dens(predictive posterior)
+dens(df$IQ)
+```{r}
+
+
+
+#Autism = 1
+#Typ = 0
+#Verbal IQ and ADOS
+#ASD$VerbalIQ
+#ASD$ADOS
+
+#Ados score, severity of autism in the children. Done for both types of kids. It is a spectrum, so everyone would add to the score to some extent.
+
+df<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, VerbalIQ, ADOS))
+
+plot(df$ADOS ~ df$VerbalIQ)
+
+#Verbal IQ prior
+sample_mu <- rnorm(1e4, 15, 2)
+sample_sigma <- runif(1e4, 0, 30)
+prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
+dens(prior_ADOS)
+
+#Map model
+flist <- alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(15, 2),
+  sigma ~ dunif(0, 30)
+)
+
+model <- map(flist, data = df)
+precis(model)
+
+#Make new model with new priors from precis(model)
+model1 <- map(
+  alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(14, 2),
+  sigma ~ dunif(0, 30)
+  ),
+  data = df
+)
+
+
+#Adding ADOS to model
+model2 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*VerbalIQ,
+    a ~ dnorm(14, 2),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 30) #Range of values 
+  ),
+  data = df)
+precis(model2)
+ 
+#a and b are perfectly negativly correlated - not very good in general in complex models. We have to transform it
+precis(model2, corr = T)
+
+#We can center them to fix it or use scale on them scale(df$VerbalIQ - mean(df$VerbalIQ))
+df$VerbalIQ.c <- df$VerbalIQ - mean(df$VerbalIQ)
+
+#Centered model. It is much better, not correlated.
+model3 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*VerbalIQ.c,
+    a ~ dnorm(14, 2),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 30) 
+  ),
+  data = df)
+precis(model3, corr = T)
+
+#Plot model, see the influence of ADOS on Verbal IQ
+plot(ADOS ~ VerbalIQ.c, data = df)
+abline(a=coef(model3)["a"], b=coef(model3)["b"])
+
+
+#Sample from full dataset
+post_1 <- extract.samples(model3)
+#Look at first 5
+post[1:5,]
+
+#Plot lines
+plot(df$VerbalIQ.c, df$ADOS,
+     xlim= range(df$VerbalIQ.c), ylim=range(df$ADOS),
+     col = rangi2, xlab ="VerbalIQ", ylab ="VerbalIQ")
+for (i in 1:20)
+  abline(a=post$a[i], b=post$b[i], col =col.alpha("black", 0.3))
+
+#take map model fit, and compute mean (u/mu) for each case in data and sample from the posterior,  for VerbalIQ p. 104
+mu <- link(model3)
+#There are 34 row, corresponding to the 34 individuals. With link we have a posterior of mu for each case we fed it. 
+str(mu)
+
+VerbalIQ.seq <- seq(from = -15, to = 30, by = 1)
+
+mu <- link(model3, data = data.frame(VerbalIQ.c = VerbalIQ.seq))
+
+mu.mean <-apply(mu, 2, mean)
+mu.HDPI <- apply(mu, 2, HPDI, prob= 0.89)
+
+#Plot uncertainty shade
+plot(ADOS ~ VerbalIQ.c, df, col=col.alpha(rangi2,0.5))
+#Draw map lines
+lines(VerbalIQ.seq, mu.mean)
+#Draw HDPI region for lines
+shade(mu.HDPI, VerbalIQ.seq)
+
+#Sim Ados from VerbalIQ
+sim.Ados <- sim(model3, data = list(VerbalIQ.c <- VerbalIQ.seq), n = 1e4)
+Ados.PI <- apply(sim.Ados, 2, PI, prob=0.89)
+
+#Draw shade
+shade(Ados.PI, VerbalIQ.seq)
+
+
+#Make density plots, model 3
+dens(post)
+
+```
+
+1.2. Non Verbal IQ and ADOS
+```{r}
+df1<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, NonVerbalIQ, ADOS))
+
+plot(df1$ADOS ~ df1$NonVerbalIQ)
+
+#NonVerbal IQ prior
+sample_mu <- rnorm(1e4, 20, 2)
+sample_sigma <- runif(1e4, 0, 30)
+prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
+dens(prior_ADOS)
+
+#Map model
+flist <- alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(20, 2),
+  sigma ~ dunif(0, 30)
+)
+
+model.a <- map(flist, data = df1)
+precis(model.a)
+
+
+#Make new model with new priors from precis(model)
+model.a1 <- map(
+  alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(14.70, 2),
+  sigma ~ dunif(0, 30)
+  ),
+  data = df1
+)
+
+
+#Adding ADOS to model
+model.a2 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*NonVerbalIQ,
+    a ~ dnorm(14.70, 2),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 30) #Range of values 
+  ),
+  data = df1)
+precis(model.a2)
+ 
+#a and b are perfectly negativly correlated - not very good in general in complex models. We have to transform it
+precis(model.a2, corr = T)
+
+#We can center them to fix it or use scale on them scale(df$NonVerbalIQ - mean(df$VerbalIQ))
+df1$NonVerbalIQ.c <- df1$NonVerbalIQ - mean(df1$NonVerbalIQ)
+
+#Centered model. It is much better, not correlated.
+model.a3 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*NonVerbalIQ.c,
+    a ~ dnorm(14.70, 2),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = df1)
+precis(model.a3, corr = T)
+
+#Plot model, see the influence of ADOS on Verbal IQ
+plot(ADOS ~ NonVerbalIQ.c, data = df1)
+abline(a=coef(model.a3)["a"], b=coef(model.a3)["b"])
+
+
+#Sample from full dataset
+post <- extract.samples(model.a3)
+#Look at first 5
+post[1:5,]
+
+#Plot lines
+plot(df1$NonVerbalIQ.c, df1$ADOS,
+     xlim= range(df1$NonVerbalIQ.c), ylim=range(df1$ADOS),
+     col = rangi2, xlab ="Non VerbalIQ", ylab ="Ados")
+for (i in 1:20)
+  abline(a=post$a[i], b=post$b[i], col =col.alpha("black", 0.3))
+
+#take map model fit, and compute mean (u/mu) for each case in data and sample from the posterior,  for VerbalIQ p. 104
+mu <- link(model.a3)
+#There are 34 row, corresponding to the 34 individuals. With link we have a posterior of mu for each case we fed it. 
+str(mu)
+
+#Make sure sequence runs from all points, centered, so set it to -15
+NonVerbalIQ.seq <- seq(from = -15, to = 30, by = 1)
+
+mu <- link(model.a3, data = data.frame(NonVerbalIQ.c = NonVerbalIQ.seq))
+
+mu.mean <-apply(mu, 2, mean)
+mu.HDPI <- apply(mu, 2, HPDI, prob= 0.89)
+
+#Plot uncertainty shade
+plot(ADOS ~ NonVerbalIQ.c, df1, col=col.alpha(rangi2,0.5))
+#Draw map lines
+lines(NonVerbalIQ.seq, mu.mean)
+#Draw HDPI region for lines
+shade(mu.HDPI, NonVerbalIQ.seq)
+
+#Sim Ados from NonVerbalIQ
+sim.Ados.a <- sim(model.a3, data = list(NonVerbalIQ.c <- NonVerbalIQ.seq), n = 1e4)
+Ados.PI.a <- apply(sim.Ados.a, 2, PI, prob=0.89)
+
+#Draw shade
+shade(Ados.PI.a, NonVerbalIQ.seq)
+
+
+```
+
+1.3. Social IQ and ADOS
+```{r}
+df3<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, SocialIQ, ADOS))
+
+plot(df3$ADOS ~ df3$SocialIQ)
+
+#NonVerbal IQ prior
+sample_mu <- rnorm(1e4, 70, 10)
+sample_sigma <- runif(1e4, 0, 105)
+prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
+dens(prior_ADOS)
+
+#Map model
+flist <- alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(70, 10),
+  sigma ~ dunif(0, 105)
+)
+
+model.b <- map(flist, data = df3)
+precis(model.b)
+
+#Correlation before adding Ados
+#vcov gives different correlation matrix from precis corr. No correlation.
+precis(model.b, corr = T)
+
+
+#Make new model with new priors from precis(model)
+model.b1 <- map(
+  alist(
+  ADOS ~ dnorm(mu, sigma),
+  mu ~ dnorm(14.20, 10),
+  sigma ~ dunif(0, 105)
+  ),
+  data = df3
+)
+
+
+#Adding ADOS to model
+model.b2 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*SocialIQ,
+    a ~ dnorm(14.20, 10),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 105) #Range of values 
+  ),
+  data = df3)
+precis(model.b2)
+ 
+#a and b are perfectly negativly correlated - not very good in general in complex models. We have to transform it
+precis(model.b2, corr = T)
+
+#We can center them to fix it or use scale on them scale(df$NonVerbalIQ - mean(df$VerbalIQ))
+df3$SocialIQ.c <- df3$SocialIQ - mean(df3$SocialIQ)
+
+#Centered model. It is much better, not correlated.
+model.b3 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + b*SocialIQ.c,
+    a ~ dnorm(14.20, 10),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 105) 
+  ),
+  data = df3)
+precis(model.b3, corr = T)
+
+#Plot model, see the influence of ADOS on Verbal IQ
+plot(ADOS ~ SocialIQ.c, data = df3)
+abline(a=coef(model.b3)["a"], b=coef(model.b3)["b"])
+
+
+#Sample from full dataset
+post <- extract.samples(model.b3)
+#Look at first 5
+post[1:5,]
+
+#Plot lines
+plot(df3$SocialIQ.c, df3$ADOS,
+     xlim= range(df3$SocialIQ.c), ylim=range(df3$ADOS),
+     col = rangi2, xlab ="Social IQ", ylab ="ADOS")
+for (i in 1:20)
+  abline(a=post$a[i], b=post$b[i], col =col.alpha("black", 0.3))
+
+#take map model fit, and compute mean (u/mu) for each case in data and sample from the posterior,  for VerbalIQ p. 104
+mu <- link(model.b3)
+#There are 34 row, corresponding to the 34 individuals. With link we have a posterior of mu for each case we fed it. 
+str(mu)
+
+SocialIQ.seq <- seq(from = -17, to = 30, by = 1)
+
+mu <- link(model.b3, data = data.frame(SocialIQ.c = SocialIQ.seq))
+
+mu.mean <-apply(mu, 2, mean)
+mu.HDPI <- apply(mu, 2, HPDI, prob= 0.89)
+
+#Plot uncertainty shade
+plot(ADOS ~ SocialIQ.c, df3, col=col.alpha(rangi2,0.5))
+#Draw map lines
+lines(SocialIQ.seq, mu.mean)
+#Draw HDPI region for lines
+shade(mu.HDPI, SocialIQ.seq)
+
+#Sim Ados from NonVerbalIQ
+sim.Ados.b <- sim(model.b3, data = list(SocialIQ.c <- SocialIQ.seq), n = 1e4)
+Ados.PI.b <- apply(sim.Ados.b, 2, PI, prob=0.89)
+
+#Draw shade
+shade(Ados.PI.b, SocialIQ.seq)
+
+#Density plot.. i dont know
+dens(post_1)
+dens(df$VerbalIQ)
+
+
+```
+
+
+2. Do the different aspects of IQ account for different portions of the variance in ADOS? 
+```{r}
+#Should look at betas and not alphas. If they are highly correlated are they saying the same thing?
+```
+
+2.1. Does it make sense to have all IQ measures in the same model? First write a few lines answering the question and motivating your answer, including a discussion as to what happens when you put all of them in the same model. Then build a model following your answer. If your answer is "no", you are not free, you still have to answer: are there alternative ways of answering the question?
+```{r}
+#All answeres have to be motived, look at results if your model was well motivated. If you say yes, it's easy. If no, you have to explain alternative model.
+```
+
+2.2. Build the model, assess its quality, write a few lines interpreting the results.
+```{r}
+#Kig Kap 4, ploinomial regression, sidste sider i kapitlet.
+```
+
+
+3. Let's now include also the TD children. Does it make sense to ask whether IQ and ADOS are related? Motivate your answer. In any case, if you wanted to build a model to answer that question, which model would you build? Run the model, assess its quality, write a few lines interpreting the results.
+```{r}
+
+```
+
+4. Let's discuss contents:
+4.1. You have three scores for IQ, do they show shared variance? Is that the same in TD and ASD? What does that tell us about IQ?
+```{r}
+#Different IQ thing - people can have different skills, like social IQ, good at art, bad at math. yadadad.
+#G-factor of IQ, all aspects of IQ are connected. Either you're clever in all aspect or stupid.
+#When we look at these variables adn correlation, what do they say?
+
+```
+
+4.2. You have explored the relation between IQ and ADOS. How do you explain that relation from a cognitive perspective? N.B. You can present alternative hypotheses.
+```{r}
+#Symptom severity, cognitive and social function severity. If they are related, what could be the mechanism. Could you say IQ drives ADOS, or ADOS IQ. 
+```
+
+5. Bonus questions: Including measurement errors. 
+5.1. Let's assume that ADOS has a measurement error of 1. How would you model that in any of the previous models? 
+```{r}
+#We know that in clinical that IQ error. If you are mentally incapable of bein culpritable. If we only have this point estimate of the IQ, do we not need the uncertainty, like ADOS? How do we do that? 
+```
+
+5.2. We know that IQ has an estimated measurement error of 2.12. How would you include that? 
+
+```{r}
+
+```
+
