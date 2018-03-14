@@ -31,8 +31,8 @@ dens(predictive posterior)
 dens(df$IQ)
 ```{r}
 
-
-
+#I scaled ADOS because correlation between betas
+ASD$ADOS <- scale(ASD$ADOS)
 #Autism = 1
 #Typ = 0
 #Verbal IQ and ADOS
@@ -47,30 +47,9 @@ plot(df$ADOS ~ df$VerbalIQ)
 
 #Verbal IQ prior
 sample_mu <- rnorm(1e4, 15, 2)
-sample_sigma <- runif(1e4, 0, 30)
+sample_sigma <- runif(1e4, 0, 40)
 prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
 dens(prior_ADOS)
-
-#Map model
-flist <- alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(15, 2),
-  sigma ~ dunif(0, 30)
-)
-
-model <- map(flist, data = df)
-precis(model)
-
-#Make new model with new priors from precis(model)
-model1 <- map(
-  alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(14, 2),
-  sigma ~ dunif(0, 30)
-  ),
-  data = df
-)
-
 
 #Adding ADOS to model
 model2 <- map(
@@ -79,7 +58,7 @@ model2 <- map(
     mu <- a + b*VerbalIQ,
     a ~ dnorm(14, 2),
     b ~ dnorm(0, 10),
-    sigma ~ dunif(0, 30) #Range of values 
+    sigma ~ dunif(0, 40) #Range of values 
   ),
   data = df)
 precis(model2)
@@ -88,16 +67,16 @@ precis(model2)
 precis(model2, corr = T)
 
 #We can center them to fix it or use scale on them scale(df$VerbalIQ - mean(df$VerbalIQ))
-df$VerbalIQ.c <- df$VerbalIQ - mean(df$VerbalIQ)
+df$VerbalIQ.c <- scale(df$VerbalIQ)
 
 #Centered model. It is much better, not correlated.
 model3 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
     mu <- a + b*VerbalIQ.c,
-    a ~ dnorm(14, 2),
+    a ~ dnorm(15, 2),
     b ~ dnorm(0, 10),
-    sigma ~ dunif(0, 30) 
+    sigma ~ dunif(0, 40) 
   ),
   data = df)
 precis(model3, corr = T)
@@ -124,7 +103,7 @@ mu <- link(model3)
 #There are 34 row, corresponding to the 34 individuals. With link we have a posterior of mu for each case we fed it. 
 str(mu)
 
-VerbalIQ.seq <- seq(from = -15, to = 30, by = 1)
+VerbalIQ.seq <- seq(from = -15, to = 40, by = 1)
 
 mu <- link(model3, data = data.frame(VerbalIQ.c = VerbalIQ.seq))
 
@@ -149,6 +128,7 @@ shade(Ados.PI, VerbalIQ.seq)
 #Make density plots, model 3
 dens(post)
 
+
 ```
 
 1.2. Non Verbal IQ and ADOS
@@ -158,31 +138,10 @@ df1<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, NonVerbalIQ, ADO
 plot(df1$ADOS ~ df1$NonVerbalIQ)
 
 #NonVerbal IQ prior
-sample_mu <- rnorm(1e4, 20, 2)
+sample_mu <- rnorm(1e4, 15, 2)
 sample_sigma <- runif(1e4, 0, 30)
 prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
 dens(prior_ADOS)
-
-#Map model
-flist <- alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(20, 2),
-  sigma ~ dunif(0, 30)
-)
-
-model.a <- map(flist, data = df1)
-precis(model.a)
-
-
-#Make new model with new priors from precis(model)
-model.a1 <- map(
-  alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(14.70, 2),
-  sigma ~ dunif(0, 30)
-  ),
-  data = df1
-)
 
 
 #Adding ADOS to model
@@ -190,7 +149,7 @@ model.a2 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
     mu <- a + b*NonVerbalIQ,
-    a ~ dnorm(14.70, 2),
+    a ~ dnorm(15, 2),
     b ~ dnorm(0, 10),
     sigma ~ dunif(0, 30) #Range of values 
   ),
@@ -208,7 +167,7 @@ model.a3 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
     mu <- a + b*NonVerbalIQ.c,
-    a ~ dnorm(14.70, 2),
+    a ~ dnorm(15, 2),
     b ~ dnorm(0, 10),
     sigma ~ dunif(0, 10) 
   ),
@@ -259,7 +218,8 @@ Ados.PI.a <- apply(sim.Ados.a, 2, PI, prob=0.89)
 #Draw shade
 shade(Ados.PI.a, NonVerbalIQ.seq)
 
-
+#Density plot.. i dont know
+dens(post)
 ```
 
 1.3. Social IQ and ADOS
@@ -269,43 +229,17 @@ df3<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, SocialIQ, ADOS))
 plot(df3$ADOS ~ df3$SocialIQ)
 
 #NonVerbal IQ prior
-sample_mu <- rnorm(1e4, 70, 10)
+sample_mu <- rnorm(1e4, 15, 10)
 sample_sigma <- runif(1e4, 0, 105)
 prior_ADOS <- rnorm (1e4, sample_mu, sample_sigma)
 dens(prior_ADOS)
-
-#Map model
-flist <- alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(70, 10),
-  sigma ~ dunif(0, 105)
-)
-
-model.b <- map(flist, data = df3)
-precis(model.b)
-
-#Correlation before adding Ados
-#vcov gives different correlation matrix from precis corr. No correlation.
-precis(model.b, corr = T)
-
-
-#Make new model with new priors from precis(model)
-model.b1 <- map(
-  alist(
-  ADOS ~ dnorm(mu, sigma),
-  mu ~ dnorm(14.20, 10),
-  sigma ~ dunif(0, 105)
-  ),
-  data = df3
-)
-
 
 #Adding ADOS to model
 model.b2 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
     mu <- a + b*SocialIQ,
-    a ~ dnorm(14.20, 10),
+    a ~ dnorm(15, 2),
     b ~ dnorm(0, 10),
     sigma ~ dunif(0, 105) #Range of values 
   ),
@@ -323,7 +257,7 @@ model.b3 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
     mu <- a + b*SocialIQ.c,
-    a ~ dnorm(14.20, 10),
+    a ~ dnorm(15, 2),
     b ~ dnorm(0, 10),
     sigma ~ dunif(0, 105) 
   ),
@@ -374,26 +308,96 @@ Ados.PI.b <- apply(sim.Ados.b, 2, PI, prob=0.89)
 shade(Ados.PI.b, SocialIQ.seq)
 
 #Density plot.. i dont know
-dens(post_1)
-dens(df$VerbalIQ)
+dens(post)
+dens(df3$SocialIQ)
 
 
 ```
 
 
 2. Do the different aspects of IQ account for different portions of the variance in ADOS? 
-```{r}
-#Should look at betas and not alphas. If they are highly correlated are they saying the same thing?
-```
-
 2.1. Does it make sense to have all IQ measures in the same model? First write a few lines answering the question and motivating your answer, including a discussion as to what happens when you put all of them in the same model. Then build a model following your answer. If your answer is "no", you are not free, you still have to answer: are there alternative ways of answering the question?
-```{r}
-#All answeres have to be motived, look at results if your model was well motivated. If you say yes, it's easy. If no, you have to explain alternative model.
-```
+
+##answered in portfolio
 
 2.2. Build the model, assess its quality, write a few lines interpreting the results.
 ```{r}
-#Kig Kap 4, ploinomial regression, sidste sider i kapitlet.
+#All answeres have to be motived, look at results if your model was well motivated. If you say yes, it's easy. If no, you have to explain alternative model.
+#Should look at betas and not alphas. If they are highly correlated are they saying the same thing.
+ASD2<- subset(ASD, Visit == 1 & ASD == 1, select = c(Visit, ASD, VerbalIQ, NonVerbalIQ, SocialIQ, ADOS))
+
+#Standarize predictors
+ASD2$VerbalIQ.s <- scale(ASD2$VerbalIQ)
+ASD2$NonVerbalIQ.s <- scale(ASD2$NonVerbalIQ)
+ASD2$SocialIQ.s <- scale(ASD2$SocialIQ)
+
+#Build map model with centered ADOS
+m2.1 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + bV*VerbalIQ.s + bNV*NonVerbalIQ.s + bS*SocialIQ.s,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bV ~ dnorm(0, 1),#uniform
+    bNV ~ dnorm(0,1),#uniform
+    bS ~ dnorm(0,1), #uniform
+    sigma ~ dunif(0,10)
+  ),
+  data = ASD2
+)
+
+#devtools::install_github("rmcelreath/rethinking", force = TRUE)
+precis(m2.1)
+
+precis(m2.1, corr = T) #Tells us the correlation between beta values. They share some of the same variance.
+
+plot(precis(m2.1))
+
+#Test if the IQ's correlate with each other.
+
+#Verbal IQ - Non-verbal IQ
+
+m2.2 <- map(
+  alist(
+    VerbalIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bNV*NonVerbalIQ.s,
+    a ~ dnorm(0, 10),
+    bNV ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASD2)
+    
+precis(m2.2)
+#bNV = 0.67
+
+#Verbal IQ - Social IQ
+m2.3 <- map(
+  alist(
+    VerbalIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bS*SocialIQ.s,
+    a ~ dnorm(0, 10),
+    bS ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASD2)
+    
+precis(m2.3)
+#bS = .60
+
+#Social IQ - Non-verbal IQ
+m2.4 <- map(
+  alist(
+    SocialIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bS*NonVerbalIQ.s,
+    a ~ dnorm(0, 10),
+    bSNV ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASD2)
+    
+precis(m2.4)
+#bSNV = 0.37
+
+
 ```
 
 
