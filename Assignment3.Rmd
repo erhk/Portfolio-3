@@ -11,6 +11,7 @@ ASD <- read.csv("Assignment3Data.csv")
 
 
 library(rethinking);library(ggplot2)
+#devtools::install_github("rmcelreath/rethinking", force = TRUE)
 ```
 
 ## Multivariate linear models
@@ -387,7 +388,7 @@ precis(m2.3)
 m2.4 <- map(
   alist(
     SocialIQ.s ~ dnorm(mu, sigma),
-    mu <- a + bS*NonVerbalIQ.s,
+    mu <- a + bSNV*NonVerbalIQ.s,
     a ~ dnorm(0, 10),
     bSNV ~ dnorm(0, 1),
     sigma ~ dunif(0, 10) 
@@ -414,7 +415,128 @@ dens(ASD2$ADOS, xlim = c(-1,2.5), ylim = c(0,1), xlab = "ADOS")
 #Make subset including TD children, 0
 ASDTD<- subset(ASD, Visit == 1, select = c(Visit, ASD, VerbalIQ, NonVerbalIQ, SocialIQ, ADOS))
 
+ASDTD$SocialIQ.s <- scale(ASDTD$SocialIQ)
+ASDTD$VerbalIQ.s <- scale(ASDTD$VerbalIQ)
+ASDTD$NonVerbalIQ.s <- scale(ASDTD$NonVerbalIQ)
+#Drop row 1, because na.
 
+ASDTD <- ASDTD[-c(1), ]
+
+str(ASDTD)
+
+#Build map model with scaled ADOS
+m3.1 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + bV*VerbalIQ.s + bNV*NonVerbalIQ.s + bS*SocialIQ.s,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bV ~ dnorm(0, 1),#uniform
+    bNV ~ dnorm(0,1),#uniform
+    bS ~ dnorm(0,1), #uniform
+    sigma ~ dunif(0,10)
+  ),
+  data = ASDTD
+)
+precis(m3.1)
+
+plot(precis(m3.1))
+#Interpreting results (I think)
+#a mean = average ADOS for TD
+#bV mean = average difference between TD and ASD in verbal IQ
+#bNV mean= average difference between TD and ASD in non verbal IQ
+#bS mean = average difference between TD and ASD in social IQ
+
+#Model Verbal IQ and Ados
+m3.2 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + bV*VerbalIQ.s,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bV ~ dnorm(0, 1),#uniform
+    sigma ~ dunif(0,10)
+  ),
+  data = ASDTD
+)
+precis(m3.2)
+
+#Compute residulas for expected value at map for each child. Do this by subtracting the observed ados for each child from the predicted one, based on verbal IQ. 
+mu <- coef(m3.2)['a'] + coef(m3.2)['bV']*ASDTD$VerbalIQ.s
+#Compute residual for each child
+m.resid <- ASDTD$ADOS - mu
+m.resid
+
+#Residual plot
+plot(ADOS ~ VerbalIQ.s, ASDTD, col=rangi2)
+abline(m3.2)
+#Loop over children
+for (i in 1:length(m.resid)) {
+  x <- ASDTD$VerbalIQ.s[i]
+  y <- ASDTD$ADOS[i]
+  #Draw line segment
+  lines(c(x,x), c(mu[i],y), lwd=0.5, col = col.alpha("black", 0.7))
+}
+
+
+#Model Non-Verbal IQ and Ados
+m3.3 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + bNV*NonVerbalIQ.s,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bNV ~ dnorm(0, 1),#uniform
+    sigma ~ dunif(0,10)
+  ),
+  data = ASDTD
+)
+precis(m3.3)
+
+#Compute residulas for expected value at map for each child. Do this by subtracting the observed ados for each child from the predicted one, based on verbal IQ. 
+muNV <- coef(m3.3)['a'] + coef(m3.3)['bNV']*ASDTD$NonVerbalIQ.s
+#Compute residual for each child
+m.residNV <- ASDTD$ADOS - muNV
+m.residNV
+
+#Residual plot
+plot(ADOS ~ NonVerbalIQ.s, ASDTD, col=rangi2)
+abline(m3.3)
+#Loop over children
+for (i in 1:length(m.residNV)) {
+  x <- ASDTD$NonVerbalIQ.s[i]
+  y <- ASDTD$ADOS[i]
+  #Draw line segment
+  lines(c(x,x), c(muNV[i],y), lwd=0.5, col = col.alpha("black", 0.7))
+}
+
+
+#Model Social IQ and Ados
+m3.4 <- map(
+  alist(
+    ADOS ~ dnorm(mu, sigma),
+    mu <- a + bS*SocialIQ.s,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bS ~ dnorm(0, 1),#uniform
+    sigma ~ dunif(0,10)
+  ),
+  data = ASDTD
+)
+precis(m3.4)
+
+#Compute residulas for expected value at map for each child. Do this by subtracting the observed ados for each child from the predicted one, based on verbal IQ. 
+muS <- coef(m3.4)['a'] + coef(m3.4)['bS']*ASDTD$SocialIQ.s
+#Compute residual for each child
+m.residS <- ASDTD$ADOS - muS
+m.residS
+
+#Residual plot
+plot(ADOS ~ SocialIQ.s, ASDTD, col=rangi2, ylim= c(-1.5, 2)) #ylim changes range of x and y axis on plot.
+abline(m3.4)
+#Loop over children
+for (i in 1:length(m.residS)) {
+  x <- ASDTD$SocialIQ.s[i]
+  y <- ASDTD$ADOS[i]
+  #Draw line segment
+  lines(c(x,x), c(muS[i],y), lwd=0.5, col = col.alpha("black", 0.7))
+}
 
 ```
 
