@@ -11,6 +11,7 @@ ASD <- read.csv("Assignment3Data.csv")
 
 
 library(rethinking);library(ggplot2)
+#To make plot(precis()) work
 #devtools::install_github("rmcelreath/rethinking", force = TRUE)
 ```
 
@@ -346,7 +347,7 @@ m2.1 <- map(
   data = ASD2
 )
 
-#devtools::install_github("rmcelreath/rethinking", force = TRUE)
+devtools::install_github("rmcelreath/rethinking", force = TRUE)
 precis(m2.1)
 
 precis(m2.1, corr = T) #Tells us the correlation between beta values. They share some of the same variance.
@@ -428,8 +429,9 @@ str(ASDTD)
 m3.1 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
-    mu <- a + bV*VerbalIQ.s + bNV*NonVerbalIQ.s + bS*SocialIQ.s,
+    mu <- a + bV*VerbalIQ.s + bNV*NonVerbalIQ.s + bS*SocialIQ.s + bD*ASD,
     a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bD ~ dnorm(0,1), #TD or ASD
     bV ~ dnorm(0, 1),#uniform
     bNV ~ dnorm(0,1),#uniform
     bS ~ dnorm(0,1), #uniform
@@ -441,7 +443,8 @@ precis(m3.1)
 
 plot(precis(m3.1))
 #Interpreting results (I think)
-#a mean = average ADOS for TD
+#a mean = average ADOS for ASD
+#bD mean = average difference in ADOS between TD and ASD
 #bV mean = average difference between TD and ASD in verbal IQ
 #bNV mean= average difference between TD and ASD in non verbal IQ
 #bS mean = average difference between TD and ASD in social IQ
@@ -450,23 +453,25 @@ plot(precis(m3.1))
 m3.2 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
-    mu <- a + bV*VerbalIQ.s,
-    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    mu <- a + bV*VerbalIQ.s + bD*ASD,
+    a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0.
+    bD ~ dnorm(0,1),
     bV ~ dnorm(0, 1),#uniform
     sigma ~ dunif(0,10)
   ),
   data = ASDTD
 )
 precis(m3.2)
+plot(precis(m3.2))
 
 #Compute residulas for expected value at map for each child. Do this by subtracting the observed ados for each child from the predicted one, based on verbal IQ. 
 mu <- coef(m3.2)['a'] + coef(m3.2)['bV']*ASDTD$VerbalIQ.s
 #Compute residual for each child
 m.resid <- ASDTD$ADOS - mu
 m.resid
-
+str(ASDTD)
 #Residual plot
-plot(ADOS ~ VerbalIQ.s, ASDTD, col=rangi2)
+plot(ADOS ~ VerbalIQ.s, ASDTD, col= rangi2)
 abline(m3.2)
 #Loop over children
 for (i in 1:length(m.resid)) {
@@ -476,13 +481,13 @@ for (i in 1:length(m.resid)) {
   lines(c(x,x), c(mu[i],y), lwd=0.5, col = col.alpha("black", 0.7))
 }
 
-
 #Model Non-Verbal IQ and Ados
 m3.3 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
-    mu <- a + bNV*NonVerbalIQ.s,
+    mu <- a + bNV*NonVerbalIQ.s + bD*ASD,
     a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bD ~ dnorm(0,1),
     bNV ~ dnorm(0, 1),#uniform
     sigma ~ dunif(0,10)
   ),
@@ -512,8 +517,9 @@ for (i in 1:length(m.residNV)) {
 m3.4 <- map(
   alist(
     ADOS ~ dnorm(mu, sigma),
-    mu <- a + bS*SocialIQ.s,
+    mu <- a + bS*SocialIQ.s + bD*ASD,
     a ~ dnorm(0, 10), #Standarized a, so we expect the mean of a to be around 0. 
+    bD ~ dnorm(0,1),
     bS ~ dnorm(0, 1),#uniform
     sigma ~ dunif(0,10)
   ),
@@ -528,7 +534,7 @@ m.residS <- ASDTD$ADOS - muS
 m.residS
 
 #Residual plot
-plot(ADOS ~ SocialIQ.s, ASDTD, col=rangi2, ylim= c(-1.5, 2)) #ylim changes range of x and y axis on plot.
+plot(ADOS ~ SocialIQ.s, ASDTD, col=rangi2) #ylim= c(-1.5, 2)ylim changes range of x and y axis on plot.
 abline(m3.4)
 #Loop over children
 for (i in 1:length(m.residS)) {
@@ -538,6 +544,59 @@ for (i in 1:length(m.residS)) {
   lines(c(x,x), c(muS[i],y), lwd=0.5, col = col.alpha("black", 0.7))
 }
 
+
+#Test if the IQ's correlate with each other with diagnosis.
+
+#Verbal IQ - Non-verbal IQ
+
+m3.VNV <- map(
+  alist(
+    VerbalIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bNV*NonVerbalIQ.s + bD*ASD,
+    a ~ dnorm(0, 10),
+    bD ~ dnorm(0,1),
+    bNV ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASDTD)
+    
+precis(m3.VNV)
+#bNV = 0.63
+
+#Verbal IQ - Social IQ
+m3.VS <- map(
+  alist(
+    VerbalIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bS*SocialIQ.s+ bD*ASD,
+    a ~ dnorm(0, 10),
+    bD~ dnorm(0,1),
+    bS ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASDTD)
+    
+precis(m3.VS)
+#bS = .70
+
+#Social IQ - Non-verbal IQ
+m3.SNV <- map(
+  alist(
+    SocialIQ.s ~ dnorm(mu, sigma),
+    mu <- a + bSNV*NonVerbalIQ.s+ bD*ASD,
+    a ~ dnorm(0, 10),
+    bD ~ dnorm(0,1),
+    bSNV ~ dnorm(0, 1),
+    sigma ~ dunif(0, 10) 
+  ),
+  data = ASDTD)
+    
+precis(m3.SNV)
+#bSNV = 0.18
+
+
+
+
+
 ```
 
 4. Let's discuss contents:
@@ -546,6 +605,9 @@ for (i in 1:length(m.residS)) {
 #Different IQ thing - people can have different skills, like social IQ, good at art, bad at math. yadadad.
 #G-factor of IQ, all aspects of IQ are connected. Either you're clever in all aspect or stupid.
 #When we look at these variables adn correlation, what do they say?
+
+
+
 
 ```
 
